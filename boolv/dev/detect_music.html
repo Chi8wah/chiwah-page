@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Beat and Segment Visualizer</title>
+<style>
+    body {
+        background-color: #000;
+        color: #fff;
+        font-family: sans-serif;
+        text-align: center;
+        padding-top: 50px;
+    }
+    #drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 20px;
+        width: 300px;
+        height: 50px;
+        line-height: 50px;
+        margin: 10px auto;
+        cursor: pointer;
+    }
+    #audio-file-input {
+        display: none;
+    }
+    textarea {
+        width: 80%;
+        max-width: 800px;
+        height: 150px;
+        margin-bottom: 20px;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    button {
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+    }
+    audio {
+        width: 80%;
+        margin-top: 20px;
+    }
+    .thumbnail {
+        width: 50%;
+        margin: auto;
+        border-radius: 8px;
+        background: yellow;
+        color: black;
+    }
+    .thumbnail::before {
+        display: inline;
+        content: '高潮 - '
+    }
+</style>
+</head>
+<body>
+
+<h1>音乐节拍可视化 Demo</h1>
+<p>操作流程:</p>
+<p>1. 上传音频文件, 看见展示出文件名即为读取成功; 2. 上传节拍和段落数据(可不上传段落数据); 3. 点击开始读取按钮, 在弹窗中点击确认; 4. 点击播放</p>
+<br />
+<div id="drop-zone">
+    将音频文件拖入框内或点击上传
+</div>
+<input type="file" id="audio-file-input" accept="audio/*">
+<br />
+<textarea id="beat-data" placeholder="填入音乐节拍数据"></textarea>
+<textarea id="segment-data" placeholder="填入音乐段落数据"></textarea>
+<br />
+<button id="submit-btn">开始读取</button>
+<br />
+<audio id="audio-player" controls></audio>
+<h1 id="beat-text">节拍: 待开始</h1>
+<h1 id="segment-text">段落: 待开始</h1>
+
+<script>
+    const dropZone = document.getElementById('drop-zone');
+    const audioFileInput = document.getElementById('audio-file-input');
+    const beatDataInput = document.getElementById('beat-data');
+    const segmentDataInput = document.getElementById('segment-data');
+    const submitBtn = document.getElementById('submit-btn');
+    const audioPlayer = document.getElementById('audio-player');
+    const body = document.body;
+    const beatTextEl = document.getElementById('beat-text');
+    const segmentTextEl = document.getElementById('segment-text');
+
+    let beatData = null;
+    let segmentData = null;
+    let beatIndex = 0;
+    let rawSegmentIndex = 0;
+    let inThumbnail = false;
+
+    const beatColors = {
+        1: '#3B3B98', // Low Saturation Blue
+        2: '#783B98', // Low Saturation Purple
+        3: '#983B78', // Low Saturation Pink
+        4: '#983B3B'  // Low Saturation Red
+    };
+
+    dropZone.addEventListener('click', () => audioFileInput.click());
+    audioFileInput.addEventListener('change', (e) => handleFileUpload(e.target.files));
+
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = '#333';
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = '';
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = '';
+        handleFileUpload(e.dataTransfer.files);
+    });
+
+    function handleFileUpload(files) {
+        if (files.length === 0) {
+            alert('Please select an audio file.');
+            return;
+        }
+
+        const file = files[0];
+        if (!file.type.startsWith('audio/')) {
+            alert('Please select a valid audio file.');
+            return;
+        }
+
+        const audioURL = URL.createObjectURL(file);
+        audioPlayer.src = audioURL;
+        dropZone.textContent = `Selected File: ${file.name}`;
+    }
+
+    submitBtn.addEventListener('click', () => {
+        if (!audioPlayer.src) {
+            alert('Please upload an audio file first.');
+            return;
+        }
+
+        // Process Beat Data
+        try {
+            beatData = JSON.parse(beatDataInput.value || '{}');
+            if (Object.keys(beatData).length > 0 && !isValidBeatData(beatData)) {
+                throw new Error('Beat data does not conform to the specification.');
+            }
+        } catch (error) {
+            alert(`Beat Data Error: ${error.message}`);
+            beatData = null;
+        }
+
+        // Process Segment Data
+        try {
+            segmentData = JSON.parse(segmentDataInput.value || '{}');
+            if (Object.keys(segmentData).length > 0 && !isValidSegmentData(segmentData)) {
+                throw new Error('Segment data does not conform to the specification.');
+            }
+        } catch (error) {
+            alert(`Segment Data Error: ${error.message}`);
+            segmentData = null;
+        }
+        
+        if (beatData || segmentData) {
+            alert('Data loaded successfully!');
+        }
+    });
+    
+    function isValidBeatData(data) {
+        return typeof data === 'object' && data !== null &&
+               data.hasOwnProperty('beats') && Array.isArray(data.beats) &&
+               data.hasOwnProperty('bpm') && typeof data.bpm === 'number' &&
+               data.hasOwnProperty('dur') && typeof data.dur === 'number';
+    }
+
+    function isValidSegmentData(data) {
+        return typeof data === 'object' && data !== null &&
+               data.hasOwnProperty('thumbnail') && Array.isArray(data.thumbnail) &&
+               data.hasOwnProperty('raw_segments') && Array.isArray(data.raw_segments);
+    }
+
+    audioPlayer.addEventListener('play', () => {
+        beatIndex = 0;
+        rawSegmentIndex = 0;
+        inThumbnail = false;
+        requestAnimationFrame(updateVisuals);
+    });
+
+    audioPlayer.addEventListener('pause', () => {
+        body.style.backgroundColor = '#000';
+    });
+
+    audioPlayer.addEventListener('ended', () => {
+        body.style.backgroundColor = '#000';
+        beatTextEl.innerText = `节拍: 待开始`;
+        segmentTextEl.innerText = `段落: 待开始`;
+    });
+
+    function updateVisuals() {
+        if (audioPlayer.paused || audioPlayer.ended) {
+            body.style.backgroundColor = '#000';
+            return;
+        }
+
+        const currentTime = audioPlayer.currentTime;
+        
+        // --- Beat Data Logic ---
+        if (beatData && beatData.beats && beatData.beats.length > 0) {
+            while (beatIndex < beatData.beats.length && beatData.beats[beatIndex].time <= currentTime) {
+                const currentBeat = beatData.beats[beatIndex];
+                body.style.backgroundColor = beatColors[currentBeat.beat];
+                beatTextEl.innerText = `节拍: ${currentBeat.beat}`;
+                beatIndex++;
+            }
+            if (beatIndex >= beatData.beats.length && beatData.beats[beatData.beats.length - 1].time <= currentTime) {
+                 body.style.backgroundColor = '#000';
+                 beatTextEl.innerText = `节拍: 结束`;
+            }
+        }
+
+        // --- Segment Data Logic ---
+        if (segmentData && segmentData.thumbnail) {
+            // 1. Thumbnail (Main Chorus) Check
+            const mainThumbnail = segmentData.thumbnail && segmentData.thumbnail[0];
+            if (mainThumbnail) {
+                const [start, end] = mainThumbnail.interval;
+                if (currentTime >= start && currentTime <= end) {
+                    if (!inThumbnail) {
+                        segmentTextEl.classList.add("thumbnail");
+                        inThumbnail = true;
+                    }
+                } else {
+                    segmentTextEl.classList.remove("thumbnail");
+                    inThumbnail = false;
+                }
+            }
+
+            // 2. Raw Segments Check
+            if (segmentData.raw_segments && rawSegmentIndex < segmentData.raw_segments.length) {
+                const currentSegment = segmentData.raw_segments[rawSegmentIndex];
+                const [start, end] = currentSegment.interval;
+                
+                if (currentTime >= start) {
+                    segmentTextEl.innerText = `段落: ${currentSegment.function_name}`;
+                    rawSegmentIndex++;
+                }
+            }
+        }
+
+        requestAnimationFrame(updateVisuals);
+    }
+</script>
+
+</body>
+</html>

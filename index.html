@@ -1,257 +1,558 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Audio Beat and Segment Visualizer</title>
-<style>
-    body {
-        background-color: #000;
-        color: #fff;
-        font-family: sans-serif;
-        text-align: center;
-        padding-top: 50px;
-    }
-    #drop-zone {
-        border: 2px dashed #ccc;
-        border-radius: 20px;
-        width: 300px;
-        height: 50px;
-        line-height: 50px;
-        margin: 10px auto;
-        cursor: pointer;
-    }
-    #audio-file-input {
-        display: none;
-    }
-    textarea {
-        width: 80%;
-        max-width: 800px;
-        height: 150px;
-        margin-bottom: 20px;
-        display: block;
-        margin-left: auto;
-        margin-right: auto;
-    }
-    button {
-        padding: 10px 20px;
-        font-size: 16px;
-        cursor: pointer;
-    }
-    audio {
-        width: 80%;
-        margin-top: 20px;
-    }
-    .thumbnail {
-        width: 50%;
-        margin: auto;
-        border-radius: 8px;
-        background: yellow;
-        color: black;
-    }
-    .thumbnail::before {
-        display: inline;
-        content: '高潮 - '
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2025 前端新特性：霓虹街景版</title>
+    <style>
+        /* =========================================
+           全局配置
+           ========================================= */
+        :root {
+            --bg-color: #020205; /* 更深邃的夜色背景 */
+            --card-bg: rgba(20, 20, 25, 0.6);
+            --card-border: rgba(255, 255, 255, 0.15);
+            --text-primary: #ffffff;
+            --text-secondary: #9ca3af;
+            
+            /* 霓虹配色 */
+            --neon-blue: #00f2ff;
+            --neon-pink: #ff0055;
+            --neon-purple: #bd00ff;
+            --neon-yellow: #ffcc00;
+            --accent-color: #00d2ff;
+            --accent-gradient: linear-gradient(135deg, #00d2ff, #3a7bd5);
+            --scroll-timeline-name: --page-scroll;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html {
+            scroll-behavior: smooth;
+            background-color: var(--bg-color);
+            timeline-scope: --page-scroll;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 4px;
+            background: var(--accent-gradient);
+            width: 0%;
+            z-index: 9999;
+            /* 核心：绑定滚动进度 */
+            animation: grow-progress auto linear;
+            animation-timeline: scroll(root);
+        }
+
+        @keyframes grow-progress {
+            from { width: 0%; }
+            to { width: 100%; }
+        }
+
+        /* =========================================
+           BLOCK 1: Hero 区域 (保留之前的科技网格)
+           ========================================= */
+        .hero-section {
+            position: relative;
+            height: 100vh;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            z-index: 2;
+        }
+
+        .mouse-grid {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            z-index: 0;
+        }
+
+        .grid-cell {
+            border: 1px solid rgba(0, 242, 255, 0.03);
+            transition: background 1s ease, box-shadow 1s ease;
+        }
+
+        .grid-cell:hover {
+            background: rgba(0, 242, 255, 0.3);
+            box-shadow: 0 0 30px var(--neon-blue);
+            transition: background 0s, box-shadow 0s;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .hero-title {
+            font-size: 5rem;
+            font-weight: 800;
+            background: linear-gradient(to bottom, #fff, #888);
+            -webkit-background-clip: text;
+            color: transparent;
+            margin-bottom: 1rem;
+            letter-spacing: -2px;
+        }
+
+        .hero-subtitle {
+            color: var(--neon-blue);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        /* =========================================
+           BLOCK 2: 内容区 (霓虹街景背景)
+           ========================================= */
+        .content-wrapper {
+            position: relative;
+            width: 100%;
+            background: var(--bg-color);
+            /* 定义此区域的滚动进度名为 --street-scroll */
+            view-timeline-name: --street-scroll;
+            view-timeline-axis: block;
+        }
+
+        /* --- 动态光斑层 --- */
+        .bokeh-bg {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(20px); /* 适当的虚化 */
+            opacity: 0.6;
+            mix-blend-mode: screen; /* 混合模式产生发光感 */
+            
+            /* 核心：绑定滚动动画 */
+            animation-timeline: --street-scroll;
+            animation-timing-function: linear;
+            animation-fill-mode: both;
+            /* 默认范围：贯穿整个区域的显示过程 */
+            animation-range: entry 0% cover 100%;
+        }
+
+        /* 定义三种移动模式：上浮、下沉、慢速视差 */
+        @keyframes float-up {
+            from { transform: translateY(100vh) scale(1); }
+            to { transform: translateY(-50vh) scale(0.8); }
+        }
+        @keyframes float-down {
+            from { transform: translateY(-50vh) scale(0.8); }
+            to { transform: translateY(100vh) scale(1.2); }
+        }
+        @keyframes drift-side {
+            from { transform: translate(-20%, 50vh) rotate(0deg); }
+            to { transform: translate(20%, -50vh) rotate(180deg); }
+        }
+
+        /* --- 生成不同颜色、大小、速度的光斑 --- */
+        /* 蓝色系 */
+        .orb.blue { background: var(--neon-blue); box-shadow: 0 0 20px var(--neon-blue); }
+        /* 粉紫系 */
+        .orb.pink { background: var(--neon-pink); box-shadow: 0 0 20px var(--neon-pink); }
+        /* 黄色系 */
+        .orb.yellow { background: var(--neon-yellow); box-shadow: 0 0 20px var(--neon-yellow); }
+
+        /* 大小与位置配置 */
+        .o1 { width: 80px; height: 80px; left: 10%; top: 10%; animation-name: float-up; }
+        .o2 { width: 120px; height: 120px; right: 15%; top: 20%; animation-name: float-down; animation-duration: 2s; } /* 这里的duration在scroll动画中代表速度权重 */
+        .o3 { width: 60px; height: 60px; left: 20%; top:10%; animation-name: drift-side; }
+        .o4 { width: 150px; height: 150px; left: -5%; bottom: 30%; background: var(--neon-purple); animation-name: float-up; opacity: 0.4; filter: blur(40px); }
+        .o5 { width: 40px; height: 40px; right: 30%; top: 40%; animation-name: float-up; }
+        
+        .o6 { width: 90px; height: 90px; left: 40%; top: 30%; animation-name: float-down; }
+        .o7 { width: 70px; height: 70px; right: 5%; bottom: 50%; animation-name: drift-side; }
+        .o8 { width: 100px; height: 100px; left: 50%; top: 60%; background: var(--neon-purple); animation-name: float-up; }
+        
+        .o9 { width: 30px; height: 30px; left: 70%; top: 15%; animation-name: float-up; }
+        .o10 { width: 180px; height: 180px; right: 10%; top: 50%; background: var(--neon-blue); animation-name: float-down; opacity: 0.3; filter: blur(50px); }
+        
+        .o11 { width: 50px; height: 50px; left: 85%; top: 80%; animation-name: float-up; }
+        .o12 { width: 110px; height: 110px; left: 15%; top: 80%; background: var(--neon-pink); animation-name: drift-side; }
+
+        /* --- 主内容布局 --- */
+        .main-content {
+            position: relative;
+            z-index: 10;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        .section-header {
+            text-align: center;
+            margin: 6rem 0;
+            padding: 2rem;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(5px);
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* --- 特性列表样式 --- */
+        .feature-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4rem;
+        }
+
+        .feature-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 3rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            
+            /* 卡片进入动画 */
+            animation: card-entry linear both;
+            animation-timeline: view();
+            animation-range: entry 100% cover 35%;
+        }
+
+        /* 偶数卡片从右边飞入，奇数从左边飞入 */
+        .feature-card:nth-child(even) {
+            flex-direction: row-reverse;
+            --start-x: 100px;
+        }
+        .feature-card:nth-child(odd) {
+            --start-x: -100px;
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            background: rgba(255,255,255,0.05);
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        @keyframes card-entry {
+            from {
+                opacity: 0;
+                transform: perspective(1000px) rotateX(40deg) translateY(100px) translateX(var(--start-x));
+            }
+            to {
+                opacity: 1;
+                transform: perspective(1000px) rotateX(0) translateY(0) translateX(0);
+            }
+        }
+
+        /* =========================================
+           RESTORED: 交互演示区样式
+           (完全还原用户请求的结构所对应的样式)
+           ========================================= */
+        .demos {
+            padding: 4rem 0;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .demo-box {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #333;
+            border-radius: 16px;
+            padding: 2rem;
+            position: relative;
+            min-height: 320px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            /* 确保 demo-box 也是毛玻璃风格 */
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        .demo-box h4 {
+            position: absolute;
+            top: 1.5rem;
+            left: 1.5rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Demo 1: Anchor Styles */
+        .anchor-target {
+            anchor-name: --my-anchor;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: help;
+            font-weight: bold;
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .anchor-tooltip {
+            position: absolute;
+            position-anchor: --my-anchor;
+            position-area: top center; /* 2025 新语法 */
+            margin-bottom: 15px;
+            background: #fff;
+            color: #000;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .anchor-target:hover + .anchor-tooltip {
+            opacity: 1;
+        }
+
+        /* Demo 2: Field Sizing Styles */
+        .auto-textarea {
+            field-sizing: content;
+            width: 85%;
+            padding: 12px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: 1px solid var(--neon-pink);
+            border-radius: 8px;
+            resize: none;
+            font-family: inherit;
+        }
+        .auto-textarea:focus { outline: none; box-shadow: 0 0 10px var(--neon-pink); }
+
+        /* Demo 3: Popover Styles */
+        .popover-btn {
+            padding: 12px 24px;
+            background: transparent;
+            color: var(--neon-yellow);
+            border: 1px solid var(--neon-yellow);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        .popover-btn:hover { background: var(--neon-yellow); color: #000; }
+
+        [popover] {
+            background: #1a1a1a;
+            border: 1px solid var(--neon-yellow);
+            color: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin: auto;
+            opacity: 0;
+            transition: display 0.3s allow-discrete, overlay 0.3s allow-discrete, opacity 0.3s;
+        }
+        [popover]:popover-open { opacity: 1; }
+        [popover]::backdrop { background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); }
+        [popover] h3 { color: var(--neon-yellow); margin-bottom: 1rem; }
+
+        /* Demo 4: Spinner Styles (Scroll Driven) */
+        .spinner {
+            width: 80px;
+            height: 80px;
+            border: 6px solid #333;
+            border-top: 6px solid var(--neon-blue);
+            border-radius: 50%;
+            
+            /* 绑定视口滚动 */
+            animation: rotate-spinner linear;
+            animation-timeline: view();
+        }
+
+        @keyframes rotate-spinner {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(720deg); }
+        }
+
+        footer {
+            text-align: center;
+            padding: 6rem 2rem;
+            color: #666;
+            font-size: 0.9rem;
+            background: #000;
+            position: relative;
+            z-index: 20;
+        }
+    </style>
 </head>
 <body>
+    <div class="progress-bar"></div>
 
-<h1>音乐节拍可视化 Demo</h1>
-<p>操作流程:</p>
-<p>1. 上传音频文件, 看见展示出文件名即为读取成功; 2. 上传节拍和段落数据(可不上传段落数据); 3. 点击开始读取按钮, 在弹窗中点击确认; 4. 点击播放</p>
-<br />
-<div id="drop-zone">
-    将音频文件拖入框内或点击上传
-</div>
-<input type="file" id="audio-file-input" accept="audio/*">
-<br />
-<textarea id="beat-data" placeholder="填入音乐节拍数据"></textarea>
-<textarea id="segment-data" placeholder="填入音乐段落数据"></textarea>
-<br />
-<button id="submit-btn">开始读取</button>
-<br />
-<audio id="audio-player" controls></audio>
-<h1 id="beat-text">节拍: 待开始</h1>
-<h1 id="segment-text">段落: 待开始</h1>
+    <!-- BLOCK 1: 科技感鼠标交互 -->
+    <section class="hero-section">
+        <div class="mouse-grid">
+            <!-- 10x10 Grid -->
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+        </div>
 
-<script>
-    const dropZone = document.getElementById('drop-zone');
-    const audioFileInput = document.getElementById('audio-file-input');
-    const beatDataInput = document.getElementById('beat-data');
-    const segmentDataInput = document.getElementById('segment-data');
-    const submitBtn = document.getElementById('submit-btn');
-    const audioPlayer = document.getElementById('audio-player');
-    const body = document.body;
-    const beatTextEl = document.getElementById('beat-text');
-    const segmentTextEl = document.getElementById('segment-text');
+        <div class="hero-content">
+            <div class="hero-subtitle">Frontend 2025</div>
+            <h1 class="hero-title">原生 · 未来</h1>
+            <p style="color: #666">↓ 滚动以查看更多</p>
+        </div>
+    </section>
 
-    let beatData = null;
-    let segmentData = null;
-    let beatIndex = 0;
-    let rawSegmentIndex = 0;
-    let inThumbnail = false;
-
-    const beatColors = {
-        1: '#3B3B98', // Low Saturation Blue
-        2: '#783B98', // Low Saturation Purple
-        3: '#983B78', // Low Saturation Pink
-        4: '#983B3B'  // Low Saturation Red
-    };
-
-    dropZone.addEventListener('click', () => audioFileInput.click());
-    audioFileInput.addEventListener('change', (e) => handleFileUpload(e.target.files));
-
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.style.backgroundColor = '#333';
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropZone.style.backgroundColor = '';
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.style.backgroundColor = '';
-        handleFileUpload(e.dataTransfer.files);
-    });
-
-    function handleFileUpload(files) {
-        if (files.length === 0) {
-            alert('Please select an audio file.');
-            return;
-        }
-
-        const file = files[0];
-        if (!file.type.startsWith('audio/')) {
-            alert('Please select a valid audio file.');
-            return;
-        }
-
-        const audioURL = URL.createObjectURL(file);
-        audioPlayer.src = audioURL;
-        dropZone.textContent = `Selected File: ${file.name}`;
-    }
-
-    submitBtn.addEventListener('click', () => {
-        if (!audioPlayer.src) {
-            alert('Please upload an audio file first.');
-            return;
-        }
-
-        // Process Beat Data
-        try {
-            beatData = JSON.parse(beatDataInput.value || '{}');
-            if (Object.keys(beatData).length > 0 && !isValidBeatData(beatData)) {
-                throw new Error('Beat data does not conform to the specification.');
-            }
-        } catch (error) {
-            alert(`Beat Data Error: ${error.message}`);
-            beatData = null;
-        }
-
-        // Process Segment Data
-        try {
-            segmentData = JSON.parse(segmentDataInput.value || '{}');
-            if (Object.keys(segmentData).length > 0 && !isValidSegmentData(segmentData)) {
-                throw new Error('Segment data does not conform to the specification.');
-            }
-        } catch (error) {
-            alert(`Segment Data Error: ${error.message}`);
-            segmentData = null;
-        }
+    <!-- BLOCK 2: 内容展示区 -->
+    <div class="content-wrapper">
         
-        if (beatData || segmentData) {
-            alert('Data loaded successfully!');
-        }
-    });
-    
-    function isValidBeatData(data) {
-        return typeof data === 'object' && data !== null &&
-               data.hasOwnProperty('beats') && Array.isArray(data.beats) &&
-               data.hasOwnProperty('bpm') && typeof data.bpm === 'number' &&
-               data.hasOwnProperty('dur') && typeof data.dur === 'number';
-    }
+        <!-- 背景层：霓虹街景光斑 (Bokeh) -->
+        <div class="bokeh-bg">
+            <div class="orb blue o1"></div>
+            <div class="orb pink o2"></div>
+            <div class="orb yellow o3"></div>
+            <div class="orb blue o4"></div>
+            <div class="orb pink o5"></div>
+            <div class="orb blue o6"></div>
+            <div class="orb blue o7"></div>
+            <div class="orb pink o8"></div>
+            <div class="orb yellow o9"></div>
+            <div class="orb yellow o10"></div>
+            <div class="orb pink o11"></div>
+            <div class="orb yellow o12"></div>
+            <div class="orb blue o1" style="left:80%; animation-delay: -1s;"></div>
+            <div class="orb pink o3" style="top:80%; left:5%; animation-direction: reverse;"></div>
+            <div class="orb yellow o5" style="top:50%; left:50%;"></div>
+        </div>
 
-    function isValidSegmentData(data) {
-        return typeof data === 'object' && data !== null &&
-               data.hasOwnProperty('thumbnail') && Array.isArray(data.thumbnail) &&
-               data.hasOwnProperty('raw_segments') && Array.isArray(data.raw_segments);
-    }
+        <main class="main-content">
+            
+            <div class="section-header">
+                <h2>HTML & CSS 中各厂商开始适配的新特性</h2>
+            </div>
 
-    audioPlayer.addEventListener('play', () => {
-        beatIndex = 0;
-        rawSegmentIndex = 0;
-        inThumbnail = false;
-        requestAnimationFrame(updateVisuals);
-    });
+            <!-- 特性介绍 -->
+            <div class="feature-list">
+                <div class="feature-card">
+                    <div class="feature-icon">⚓</div>
+                    <div>
+                        <h3 style="color:var(--neon-blue)">Anchor Positioning</h3>
+                        <p>将元素“锚定”到页面上的任何位置。原生解决 Popover 和 Tooltip 的定位难题，自动处理边界碰撞。</p>
+                    </div>
+                </div>
 
-    audioPlayer.addEventListener('pause', () => {
-        body.style.backgroundColor = '#000';
-    });
+                <div class="feature-card">
+                    <div class="feature-icon">📜</div>
+                    <div>
+                        <h3 style="color:var(--neon-pink)">Scroll-driven Animations</h3>
+                        <p>正如你此刻所见。背景光斑的浮动、卡片的飞入、Spinner 的旋转，全部由滚动条驱动，无需一行 JS。</p>
+                    </div>
+                </div>
 
-    audioPlayer.addEventListener('ended', () => {
-        body.style.backgroundColor = '#000';
-        beatTextEl.innerText = `节拍: 待开始`;
-        segmentTextEl.innerText = `段落: 待开始`;
-    });
+                <div class="feature-card">
+                    <div class="feature-icon">📐</div>
+                    <div>
+                        <h3 style="color:var(--neon-yellow)">Field Sizing</h3>
+                        <p>表单控件的自然进化。允许 input 和 textarea 根据内容的多少自动调整大小。</p>
+                    </div>
+                </div>
+            </div>
 
-    function updateVisuals() {
-        if (audioPlayer.paused || audioPlayer.ended) {
-            body.style.backgroundColor = '#000';
-            return;
-        }
+            <div class="section-header" style="margin-top: 8rem;">
+                <h2>交互演示 (Live Demos)</h2>
+            </div>
 
-        const currentTime = audioPlayer.currentTime;
-        
-        // --- Beat Data Logic ---
-        if (beatData && beatData.beats && beatData.beats.length > 0) {
-            while (beatIndex < beatData.beats.length && beatData.beats[beatIndex].time <= currentTime) {
-                const currentBeat = beatData.beats[beatIndex];
-                body.style.backgroundColor = beatColors[currentBeat.beat];
-                beatTextEl.innerText = `节拍: ${currentBeat.beat}`;
-                beatIndex++;
-            }
-            if (beatIndex >= beatData.beats.length && beatData.beats[beatData.beats.length - 1].time <= currentTime) {
-                 body.style.backgroundColor = '#000';
-                 beatTextEl.innerText = `节拍: 结束`;
-            }
-        }
+            <!-- 还原的演示区结构 -->
+            <section class="demos">
+                <div class="demo-grid">
+                    
+                    <!-- Demo 1: Anchor Positioning -->
+                    <div class="demo-box">
+                        <h4>CSS Anchor Positioning</h4>
+                        <!-- 锚点 -->
+                        <div class="anchor-target" id="my-anchor-el">?</div>
+                        <!-- 提示框 (纯 CSS 定位) -->
+                        <div class="anchor-tooltip">
+                            我是纯 CSS 定位的 Tooltip！
+                        </div>
+                        <p style="margin-top: 1rem; font-size: 0.8rem; color:#bbb;">(鼠标悬停在问号上)</p>
+                    </div>
 
-        // --- Segment Data Logic ---
-        if (segmentData && segmentData.thumbnail) {
-            // 1. Thumbnail (Main Chorus) Check
-            const mainThumbnail = segmentData.thumbnail && segmentData.thumbnail[0];
-            if (mainThumbnail) {
-                const [start, end] = mainThumbnail.interval;
-                if (currentTime >= start && currentTime <= end) {
-                    if (!inThumbnail) {
-                        segmentTextEl.classList.add("thumbnail");
-                        inThumbnail = true;
-                    }
-                } else {
-                    segmentTextEl.classList.remove("thumbnail");
-                    inThumbnail = false;
-                }
-            }
+                    <!-- Demo 2: Field Sizing -->
+                    <div class="demo-box">
+                        <h4>field-sizing: content</h4>
+                        <textarea class="auto-textarea" placeholder="在这里打字，我会自动变高..."></textarea>
+                    </div>
 
-            // 2. Raw Segments Check
-            if (segmentData.raw_segments && rawSegmentIndex < segmentData.raw_segments.length) {
-                const currentSegment = segmentData.raw_segments[rawSegmentIndex];
-                const [start, end] = currentSegment.interval;
-                
-                if (currentTime >= start) {
-                    segmentTextEl.innerText = `段落: ${currentSegment.function_name}`;
-                    rawSegmentIndex++;
-                }
-            }
-        }
+                    <!-- Demo 3: Popover API -->
+                    <div class="demo-box">
+                        <h4>Native Popover API</h4>
+                        <button class="popover-btn" popovertarget="my-popover">打开弹窗</button>
+                        
+                        <div id="my-popover" popover>
+                            <h3>原生 Popover</h3>
+                            <p>这是一个无需 JS 的原生弹窗。</p>
+                            <p>点击背景即可关闭。</p>
+                        </div>
+                    </div>
 
-        requestAnimationFrame(updateVisuals);
-    }
-</script>
+                    <!-- Demo 4: Scroll Animation Meta -->
+                    <div class="demo-box">
+                        <h4>Scroll-driven Animation</h4>
+                        <div class="spinner"></div>
+                        <p style="margin-top: 1rem; font-size: 0.8rem; color:#bbb;">(上下滚动页面看我旋转)</p>
+                    </div>
 
+                    <div class="demo-box">
+                        <h4>彩蛋: 基于 Three.js 的射击小球游戏</h4>
+                        <a target="_blank" href="demos/jenga.html" style="margin-top: 1rem; font-size: 2.5rem; color:#bbb; text-decoration: none">点击跳转</a>
+                    </div>
+
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <footer>
+        Designed with 2025 Web Standards. No JavaScript. Generated by AI. Edited by Chi8wah(主要是看看 gemini 3 的水平).
+    </footer>
 </body>
 </html>
